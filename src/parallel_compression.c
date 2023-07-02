@@ -1,4 +1,4 @@
-#include "serial_compression.h"
+#include "parallel_compression.h"
 #include "huffman.h"
 
 #include <errno.h>
@@ -76,8 +76,47 @@ void test_bitstream_push_chunk() {
     bitstream_destroy(p);
 }
 
-struct serial_compressor* serial_compressor_new(uint8_t *input, size_t size) {
-    struct serial_compressor *p = calloc(1, sizeof(*p));
+void bitstream_append(struct bitstream *p, struct bitstream *q) {
+    size_t idx = p->offset / 8;
+    size_t q_size = (q->offset % 8 == 0) ? q->offset / 8 : q->offset/8 + 1;
+    uint8_t shift = p->offset  % 8;
+
+    p->buf[idx] |= q->buf[0] >> shift;
+    idx++;
+
+    for (size_t i = 0; i < q_size - 1; i++) {
+        p->buf[idx + i] = q->buf[i] << (8 - shift) | q->buf[i+1] >> shift;
+    }
+
+    p->buf[idx + q_size - 1] = q->buf[q_size - 1] << (8 - shift);
+    p->offset += q->offset;
+}
+
+void bitstream_print(struct bitstream *p) {
+    printf("offset=%lu\n", p->offset);
+    printf("[ ");
+    size_t size = (p->offset % 8 == 0) ? p->offset / 8 : p->offset / 8 + 1;
+    for (uint64_t i = 0; i < size; i++) {
+        printf("%08b ", p->buf[i]);
+    }
+    printf("]\n");
+}
+
+void test_bitstream_append() {
+    struct bitstream *a = bitstream_new(16);
+    struct bitstream *b = bitstream_new(16);
+    bitstream_push_chunk(a, 0b11110111, 8);
+    bitstream_push_chunk(a, 0b000, 3);
+    bitstream_push_chunk(b, 0b11111111, 8);
+    bitstream_append(a, b);
+    assert(a->buf[0] == 0b11110111);
+    assert(a->buf[1] == 0b00011111);
+    assert(a->buf[2] == 0b11100000);
+    bitstream_print(a);
+}
+
+struct parallel_compressor* parallel_compressor_new(uint8_t *input, size_t size) {
+    struct parallel_compressor *p = calloc(1, sizeof(*p));
     p->dict = calloc(256, sizeof(struct hfcode));
     p->in = input;
     p->in_size = size;
@@ -85,12 +124,12 @@ struct serial_compressor* serial_compressor_new(uint8_t *input, size_t size) {
     return p;
 }
 
-void serial_compressor_destroy(struct serial_compressor *p) {
+void parallel_compressor_destroy(struct parallel_compressor *p) {
     bitstream_destroy(p->ostream);
     free(p);
 }
 
-void serial_compressor_generate_frequency_table(struct serial_compressor *p, uint64_t *frequencies) {
+void parallel_compressor_generate_frequency_table(struct parallel_compressor *p, uint64_t *frequencies) {
     memset(frequencies, 0, 256 * sizeof(uint64_t));
     #pragma omp parallel for
     for (size_t i = 0; i < p->in_size; i++) {
@@ -101,28 +140,42 @@ void serial_compressor_generate_frequency_table(struct serial_compressor *p, uin
     }
 }
 
-void serial_compressor_digest(struct serial_compressor *p) {
+void parallel_compressor_digest(struct parallel_compressor *p) {
     uint64_t frequencies[256];
 
-    serial_compressor_generate_frequency_table(p, frequencies);
+    parallel_compressor_generate_frequency_table(p, frequencies);
 
     struct hftree *tree = hftree_new(frequencies);
     hftree_generate_dict(tree, p->dict);
-    // hftree_print(tree);
-    //
     
-    for (size_t i = 0; i < p->in_size; i++) {
-        // printf("currently at %lu bytes\n", i);
-        uint8_t byte = p->in[i];
-        struct hfcode t = p->dict[byte];
-        // printf("pushing 0x%02x -> 0b%b:%u to the bitstream\n", byte, t.code, t.bit_length);
-        bitstream_push_chunk(p->ostream, t.code, t.bit_length);
-    }
+    int threads = omp_get_max_threads();
+    printf("available threads: %d\n", threads);
+    struct bitstream* ostreams[threads];
 
+    for (size_t i = 0; i < threads; i++) {
+        ostreams[i] = bitstream_new(2 * p->in_size / threads);
+    }
+    
+    // each thread compresses a chunk of the input into
+    // a separate buffer (bitstream)
+    #pragma omp parallel num_threads(threads)
+    {
+        #pragma omp for schedule(static)
+        for (size_t i = 0; i < p->in_size; i++) {
+            int tid = omp_get_thread_num();
+            // printf("thread %d: %lu\n", tid, i);
+            // printf("currently at %lu bytes\n", i);
+            uint8_t byte = p->in[i];
+            struct hfcode t = p->dict[byte];
+            // printf("pushing 0x%02x -> 0b%b:%u to the bitstream\n", byte, t.code, t.bit_length);
+            bitstream_push_chunk(ostreams[tid], t.code, t.bit_length);
+        }
+    }
+    // bitstream_print(ostreams[0]);
     printf("compression: %2fx\n", p->in_size / (p->ostream->offset/8.0));
 }
 
-void test_serial_compression(char *filename) {
+void test_parallel_compression(char *filename) {
     FILE *file = fopen(filename, "r+b");
     if (!file) {
         fprintf(stderr, "failed to read file %s: %s\n", filename, strerror(errno));
@@ -141,16 +194,17 @@ void test_serial_compression(char *filename) {
     }
     size_t read = fread(buf, 1, buf_size, file);
     printf("read %lu bytes from %s\n", read, filename);
-    struct serial_compressor *p = serial_compressor_new(buf, read);
-    serial_compressor_digest(p);
+    struct parallel_compressor *p = parallel_compressor_new(buf, read);
+    parallel_compressor_digest(p);
 }
 
 int main(int argc, char **argv) {
     if (argc != 2) {
-        fprintf(stderr, "usage: ./serial_compression <filename>\n");
+        fprintf(stderr, "usage: ./parallel_compression <filename>\n");
         exit(1);
     }
 
     // test_bitstream_push_chunk();
-    test_serial_compression(argv[1]);
+    // test_bitstream_append();
+    test_parallel_compression(argv[1]);
 }
