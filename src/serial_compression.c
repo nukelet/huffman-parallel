@@ -74,6 +74,16 @@ void test_bitstream_push_chunk() {
     bitstream_destroy(p);
 }
 
+void bitstream_print(struct bitstream *p) {
+    printf("offset=%lu\n", p->offset);
+    printf("[ ");
+    size_t size = (p->offset % 8 == 0) ? p->offset / 8 : p->offset / 8 + 1;
+    for (uint64_t i = 0; i < size; i++) {
+        printf("%08b ", p->buf[i]);
+    }
+    printf("]\n");
+}
+
 struct serial_compressor* serial_compressor_new(uint8_t *input, size_t size) {
     struct serial_compressor *p = calloc(1, sizeof(*p));
     p->dict = calloc(256, sizeof(struct hfcode));
@@ -115,6 +125,8 @@ void serial_compressor_digest(struct serial_compressor *p) {
         bitstream_push_chunk(p->ostream, t.code, t.bit_length);
     }
 
+    // bitstream_print(p->ostream);
+    // printf("total offset: %lu\n", p->ostream->offset);
     printf("compression: %2fx\n", p->in_size / (p->ostream->offset/8.0));
 }
 
