@@ -105,7 +105,7 @@ void hftree_collect_codes(struct node *t, struct hfcode *dict,
 
     if (t->type == NODE_LEAF) {
         // printf("writing entry: (0x%02x, 0b%b:%u)\n", t->symbol, path, length);
-        printf("writing entry: ('0x%02x=%c', 0b%b:%u)\n", t->symbol, t->symbol, path, length);
+        // printf("writing entry: ('0x%02x=%c', 0b%b:%u)\n", t->symbol, t->symbol, path, length);
         dict[t->symbol].code = path;
         dict[t->symbol].bit_length = length;
     }

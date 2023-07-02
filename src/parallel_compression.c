@@ -6,6 +6,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include <omp.h>
+
 struct bitstream* bitstream_new(size_t capacity) {
     struct bitstream *p = malloc(sizeof(struct bitstream));
     p->buf = malloc(capacity);
@@ -90,9 +92,11 @@ void serial_compressor_destroy(struct serial_compressor *p) {
 
 void serial_compressor_generate_frequency_table(struct serial_compressor *p, uint64_t *frequencies) {
     memset(frequencies, 0, 256 * sizeof(uint64_t));
+    #pragma omp parallel for
     for (size_t i = 0; i < p->in_size; i++) {
         // printf("omp_in_parallel: %d\n", omp_in_parallel());
         uint8_t byte = p->in[i];
+        #pragma omp atomic
         frequencies[byte]++;
     }
 }
