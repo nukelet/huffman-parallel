@@ -1,3 +1,0 @@
-/home/nuke/faculdade/mc970/huffman-parallel/build/CMakeFiles/serial_compression.dir
-/home/nuke/faculdade/mc970/huffman-parallel/build/CMakeFiles/edit_cache.dir
-/home/nuke/faculdade/mc970/huffman-parallel/build/CMakeFiles/rebuild_cache.dir

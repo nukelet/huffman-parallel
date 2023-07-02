@@ -1,1 +1,0 @@
-/usr/bin/cc CMakeFiles/serial_compression.dir/src/serial_compression.c.o CMakeFiles/serial_compression.dir/src/minheap.c.o CMakeFiles/serial_compression.dir/src/huffman.c.o -o serial_compression  /usr/lib/libgomp.so /usr/lib/libpthread.a 
