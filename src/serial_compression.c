@@ -8,7 +8,7 @@
 
 struct bitstream* bitstream_new(size_t capacity) {
     struct bitstream *p = malloc(sizeof(struct bitstream));
-    p->buf = malloc(capacity);
+    p->buf = calloc(capacity, 1);
     p->capacity = capacity;
     p->length = 0;
     p->offset = 0;
@@ -121,12 +121,12 @@ void serial_compressor_digest(struct serial_compressor *p) {
         // printf("currently at %lu bytes\n", i);
         uint8_t byte = p->in[i];
         struct hfcode t = p->dict[byte];
-        // printf("pushing 0x%02x -> 0b%b:%u to the bitstream\n", byte, t.code, t.bit_length);
+        // printf("(%lu) pushing 0x%02x -> 0b%b:%u to the bitstream\n", i, byte, t.code, t.bit_length);
         bitstream_push_chunk(p->ostream, t.code, t.bit_length);
     }
 
-    // bitstream_print(p->ostream);
-    // printf("total offset: %lu\n", p->ostream->offset);
+    bitstream_print(p->ostream);
+    printf("total offset: %lu\n", p->ostream->offset);
     printf("compression: %2fx\n", p->in_size / (p->ostream->offset/8.0));
 }
 
@@ -149,8 +149,20 @@ void test_serial_compression(char *filename) {
     }
     size_t read = fread(buf, 1, buf_size, file);
     printf("read %lu bytes from %s\n", read, filename);
+    fclose(file);
+
     struct serial_compressor *p = serial_compressor_new(buf, read);
     serial_compressor_digest(p);
+
+    file = fopen("out/serial.out", "wb");
+    if (!file) {
+        fprintf(stderr, "failed to open file %s: %s\n", filename, strerror(errno));
+        exit(1);
+    }
+
+    size_t size = (p->ostream->offset % 8 == 0) ? p->ostream->offset / 8 : p->ostream->offset + 1;
+    printf("writing %lu bytes to disk\n", size);
+    fwrite(p->ostream->buf, 1, size, file);
 }
 
 int main(int argc, char **argv) {
