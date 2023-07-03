@@ -2,6 +2,7 @@
 #include "huffman.h"
 
 #include <errno.h>
+#include <omp.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -117,6 +118,8 @@ void serial_compressor_digest(struct serial_compressor *p) {
     // hftree_print(tree);
     //
     
+    double start = omp_get_wtime();
+
     for (size_t i = 0; i < p->in_size; i++) {
         // printf("currently at %lu bytes\n", i);
         uint8_t byte = p->in[i];
@@ -124,10 +127,12 @@ void serial_compressor_digest(struct serial_compressor *p) {
         // printf("(%lu) pushing 0x%02x -> 0b%b:%u to the bitstream\n", i, byte, t.code, t.bit_length);
         bitstream_push_chunk(p->ostream, t.code, t.bit_length);
     }
-
-    bitstream_print(p->ostream);
-    printf("total offset: %lu\n", p->ostream->offset);
-    printf("compression: %2fx\n", p->in_size / (p->ostream->offset/8.0));
+    
+    double duration = omp_get_wtime() - start;
+    printf("%.6f\n", duration);
+    // bitstream_print(p->ostream);
+    // printf("total offset: %lu\n", p->ostream->offset);
+    // printf("compression: %2fx\n", p->in_size / (p->ostream->offset/8.0));
 }
 
 void test_serial_compression(char *filename) {
@@ -148,7 +153,7 @@ void test_serial_compression(char *filename) {
         exit(1);
     }
     size_t read = fread(buf, 1, buf_size, file);
-    printf("read %lu bytes from %s\n", read, filename);
+    // printf("read %lu bytes from %s\n", read, filename);
     fclose(file);
 
     struct serial_compressor *p = serial_compressor_new(buf, read);
@@ -156,12 +161,12 @@ void test_serial_compression(char *filename) {
 
     file = fopen("out/serial.out", "wb");
     if (!file) {
-        fprintf(stderr, "failed to open file %s: %s\n", filename, strerror(errno));
+        fprintf(stderr, "failed to open file %s: %s\n", "out/serial.out", strerror(errno));
         exit(1);
     }
 
-    size_t size = (p->ostream->offset % 8 == 0) ? p->ostream->offset / 8 : p->ostream->offset + 1;
-    printf("writing %lu bytes to disk\n", size);
+    size_t size = (p->ostream->offset % 8 == 0) ? p->ostream->offset / 8 : p->ostream->offset / 8 + 1;
+    // printf("writing %lu bytes to disk\n", size);
     fwrite(p->ostream->buf, 1, size, file);
 }
 

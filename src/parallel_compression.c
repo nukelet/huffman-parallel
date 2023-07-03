@@ -108,11 +108,12 @@ void test_bitstream_append() {
     struct bitstream *b = bitstream_new(16);
     bitstream_push_chunk(a, 0b11110111, 8);
     bitstream_push_chunk(a, 0b000, 3);
+    bitstream_push_chunk(b, 0b11111, 5);
     bitstream_push_chunk(b, 0b11111111, 8);
     bitstream_append(a, b);
     assert(a->buf[0] == 0b11110111);
     assert(a->buf[1] == 0b00011111);
-    assert(a->buf[2] == 0b11100000);
+    assert(a->buf[2] == 0b11111111);
     bitstream_print(a);
 }
 
@@ -161,7 +162,7 @@ void parallel_compressor_digest(struct parallel_compressor *p) {
     hftree_generate_dict(tree, p->dict);
     
     size_t threads = omp_get_max_threads();
-    printf("available threads: %lu\n", threads);
+    // printf("available threads: %lu\n", threads);
     struct bitstream* ostreams[threads];
 
     // allocate buffers for each thread
@@ -190,17 +191,18 @@ void parallel_compressor_digest(struct parallel_compressor *p) {
 
     // compression is over
     double duration = omp_get_wtime() - start;
-    printf("duration: %.6f\n", duration);
+    // output duration to stdout
+    printf("%.6f\n", duration);
 
     for (size_t i = 0; i < threads; i++) {
         bitstream_append(p->ostream, ostreams[i]);
-        // printf("bitstream %lu:\n", i);
+        // printf("bitstream %lu has offset %lu\n", i, ostreams[i]->offset);
         // bitstream_print(ostreams[i]);
     }
 
-    bitstream_print(p->ostream);
-    printf("total offset: %lu\n", p->ostream->offset);
-    printf("compression: %2fx\n", p->in_size / (p->ostream->offset/8.0));
+    // bitstream_print(p->ostream);
+    // printf("total offset: %lu\n", p->ostream->offset);
+    // printf("compression: %2fx\n", p->in_size / (p->ostream->offset/8.0));
 }
 
 void test_parallel_compression(char *filename) {
@@ -221,7 +223,7 @@ void test_parallel_compression(char *filename) {
         exit(1);
     }
     size_t read = fread(buf, 1, buf_size, file);
-    printf("read %lu bytes from %s\n", read, filename);
+    // printf("read %lu bytes from %s\n", read, filename);
     fclose(file);
 
     struct parallel_compressor *p = parallel_compressor_new(buf, read);
@@ -229,12 +231,12 @@ void test_parallel_compression(char *filename) {
 
     file = fopen("out/parallel.out", "wb");
     if (!file) {
-        fprintf(stderr, "failed to open file %s: %s\n", filename, strerror(errno));
+        fprintf(stderr, "failed to open file out/parallel.out: %s\n", strerror(errno));
         exit(1);
     }
 
-    size_t size = (p->ostream->offset % 8 == 0) ? p->ostream->offset / 8 : p->ostream->offset + 1;
-    printf("writing %lu bytes to disk\n", size);
+    size_t size = (p->ostream->offset % 8 == 0) ? p->ostream->offset / 8 : p->ostream->offset / 8 + 1;
+    // printf("writing %lu bytes to disk\n", size);
     fwrite(p->ostream->buf, 1, size, file);
 }
 
@@ -246,11 +248,6 @@ int main(int argc, char **argv) {
 
     // test_bitstream_push_chunk();
     // test_bitstream_append();
+
     test_parallel_compression(argv[1]);
-    // struct bitstream *a = bitstream_new(64);
-    // struct bitstream *b = bitstream_new(64);
-    // bitstream_push_chunk(a, 0b10, 2);
-    // bitstream_print(a);
-    // bitstream_push_chunk(a, 0b00, 2);
-    // bitstream_print(a);
 }
