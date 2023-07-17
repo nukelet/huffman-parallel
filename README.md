@@ -1,10 +1,6 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-24ddc0f5d75046c5622901739e7c5dd533143b0c8e959d652212380cedb1ea36.svg)](https://classroom.github.com/a/SvGT8lI6)
+# Parallel Huffman
 
-# Parallelizing Gzip
-
-This repository contains the code for our final project, regarding parallelizing the Gzip algorithm. As explained in our report, we decided to parallelize one specific step of the Gzip algorithm, due to the high complexity of the Gzip algorithm as a whole. This specific step is the Huffman encoding process, which translates the original message to a Huffman code representation of it.
-
-All the code in this repository was made by ourselves and is documented with comments, to make it easier for other people to understand. You can find the algorithm explanation, as well as the description of our implementation, in our report pdf file.
+This is an attempt at parallelizing Huffman Encoding using OpenMP.
 
 ## Repository Structure
 
